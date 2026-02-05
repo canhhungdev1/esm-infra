@@ -1,0 +1,77 @@
+version: "3.9"  # Phiên bản docker-compose, nên dùng 3.9 cho đa nền tảng
+
+services:
+  # ======================
+  # API Gateway
+  # ======================
+  gateway:
+    build: ../esm-gateway          # Build image từ Dockerfile trong repo esm-gateway
+    ports:
+      - "3000:3000"                # Port container 3000 → port local 3000
+    depends_on:
+      - auth                        # Chạy gateway sau khi auth service sẵn sàng
+      - core                        # Chạy gateway sau khi core service sẵn sàng
+      - report                      # Chạy gateway sau khi report service sẵn sàng
+
+  # ======================
+  # Auth Service
+  # ======================
+  auth:
+    build: ../esm-auth             # Build image từ Dockerfile trong repo esm-auth
+    environment:
+      - DATABASE_URL=mysql://root:root@auth-db:3306/auth  # Connection string DB
+    depends_on:
+      - auth-db                    # Chạy auth service sau khi database sẵn sàng
+
+  # ======================
+  # Core Service
+  # ======================
+  core:
+    build: ../esm-core
+    environment:
+      - DATABASE_URL=mysql://root:root@core-db:3306/core  # Connection string DB
+      - RABBITMQ_URL=amqp://rabbitmq                       # Connection string RabbitMQ
+    depends_on:
+      - core-db                     # Chạy core service sau khi core DB sẵn sàng
+      - rabbitmq                    # Chạy core service sau khi RabbitMQ sẵn sàng
+
+  # ======================
+  # Report Service
+  # ======================
+  report:
+    build: ../esm-report
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq  # Kết nối RabbitMQ để consume event
+    depends_on:
+      - rabbitmq                    # Chạy report service sau khi RabbitMQ sẵn sàng
+
+  # ======================
+  # MySQL Database cho Auth
+  # ======================
+  auth-db:
+    image: mysql:8                  # Sử dụng image MySQL 8
+    environment:
+      MYSQL_ROOT_PASSWORD: root     # Root password
+      MYSQL_DATABASE: auth          # Tạo database auth
+    ports:
+      - "3307:3306"                 # Ánh xạ port container 3306 → port local 3307
+
+  # ======================
+  # MySQL Database cho Core
+  # ======================
+  core-db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: core
+    ports:
+      - "3308:3306"                 # Ánh xạ port container 3306 → port local 3308
+
+  # ======================
+  # RabbitMQ
+  # ======================
+  rabbitmq:
+    image: rabbitmq:3-management    # RabbitMQ với giao diện quản lý
+    ports:
+      - "5672:5672"                 # AMQP port cho event queue
+      - "15672:15672"               # Web UI port để quản lý RabbitMQ
